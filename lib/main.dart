@@ -1,5 +1,7 @@
 
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const FinanceApp());
@@ -24,8 +26,231 @@ class FinanceApp extends StatelessWidget {
   }
 }
 
-class HomePage extends StatelessWidget {
+
+class Expense {
+  final double amount;
+  final String category;
+  final String description;
+  final DateTime date;
+
+  Expense({
+    required this.amount,
+    required this.category,
+    required this.description,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'amount': amount,
+      'category': category,
+      'description': description,
+      'date': date.toIso8601String(),
+    };
+  }
+
+  factory Expense.fromJson(Map<String, dynamic> json) {
+    return Expense(
+      amount: (json['amount'] as num).toDouble(),
+      category: json['category'] as String,
+      description: json['description'] as String,
+      date: DateTime.parse(json['date'] as String),
+    );
+  }
+}
+
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final List<Expense> expenses = [];
+  
+@override
+void initState() {
+  super.initState();
+  loadExpenses();
+}
+
+Future<void> saveExpenses() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final data = expenses.map((e) => e.toJson()).toList();
+
+  await prefs.setString('expenses', jsonEncode(data));
+}
+
+Future<void> loadExpenses() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final savedData = prefs.getString('expenses');
+
+  if (savedData == null) return;
+
+  final List<dynamic> decoded = jsonDecode(savedData);
+
+  if (!mounted) return;
+
+  setState(() {
+    expenses.clear();
+
+    expenses.addAll(
+      decoded.map(
+        (item) => Expense.fromJson(
+          Map<String, dynamic>.from(item),
+        ),
+      ),
+    );
+  });
+}
+
+
+  String formatMoney(double amount) {
+    return '${amount.toStringAsFixed(2).replaceAll('.', ',')} TL';
+  }
+
+  double get monthlyTotal {
+    final now = DateTime.now();
+
+    return expenses
+        .where((expense) =>
+            expense.date.year == now.year &&
+            expense.date.month == now.month)
+        .fold<double>(
+          0,
+          (total, expense) => total + expense.amount,
+        );
+  }
+
+  Future<void> addExpense() async {
+    final amountController = TextEditingController();
+    final descriptionController = TextEditingController();
+    String selectedCategory = 'Yemek';
+
+    final newExpense = await showDialog<Expense>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Yeni Harcama'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: amountController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Tutar (TL)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategory,
+                      decoration: const InputDecoration(
+                        labelText: 'Kategori',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        'Yemek',
+                        'Ulaşım',
+                        'Alışveriş',
+                        'Eğlence',
+                        'Faturalar',
+                        'Diğer',
+                      ].map((category) {
+                        return DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            selectedCategory = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Açıklama',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('İptal'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final amount = double.tryParse(
+                      amountController.text
+                          .trim()
+                          .replaceAll(',', '.'),
+                    );
+
+                    if (amount == null ||
+                        !amount.isFinite ||
+                        amount <= 0) {
+                      ScaffoldMessenger.of(this.context)
+                          .showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Geçerli bir tutar giriniz.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(
+                      dialogContext,
+                      Expense(
+                        amount: amount,
+                        category: selectedCategory,
+                        description:
+                            descriptionController.text.trim(),
+                        date: DateTime.now(),
+                      ),
+                    );
+                  },
+                  child: const Text('Kaydet'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    
+    
+
+    if (!mounted || newExpense == null) return;
+
+    setState(() {
+      expenses.add(newExpense);
+    });
+    await saveExpenses();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,13 +277,14 @@ class HomePage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     const Text('Bu Ayki Harcamalarım'),
                     const SizedBox(height: 10),
-                    const Text(
-                      '0,00 TL',
-                      style: TextStyle(
+                    Text(
+                      formatMoney(monthlyTotal),
+                      style: const TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.bold,
                       ),
@@ -68,21 +294,65 @@ class HomePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Henüz harcama eklenmedi.',
-              style: TextStyle(fontSize: 16),
+            Expanded(
+              child: expenses.isEmpty
+                  ? const Text(
+                      'Henüz harcama eklenmedi.',
+                      style: TextStyle(fontSize: 16),
+                    )
+                  : ListView.builder(
+                      itemCount: expenses.length,
+                      itemBuilder: (context, index) {
+                        final expense =
+                            expenses[expenses.length - 1 - index];
+
+                        return Card(
+                          child: ListTile(
+                            leading: const CircleAvatar(
+                              child: Icon(Icons.shopping_bag),
+                            ),
+                            title: Text(expense.category),
+                            subtitle: Text(
+                              expense.description.isEmpty
+                                  ? 'Açıklama yok'
+                                  : expense.description,
+                            ),
+                            
+trailing: Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    Text(
+      formatMoney(expense.amount),
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    IconButton(
+      icon: const Icon(
+        Icons.delete_outline,
+        color: Colors.red,
+      ),
+      onPressed: () async {
+        setState(() {
+          expenses.removeAt(expenses.length - 1 - index);
+        });
+
+        await saveExpenses();
+      },
+    ),
+  ],
+),                  
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Harcama ekleme yakında!'),
-            ),
-          );
-        },
+      floatingActionButton:
+          FloatingActionButton.extended(
+        onPressed: addExpense,
         icon: const Icon(Icons.add),
         label: const Text('Harcama Ekle'),
       ),
