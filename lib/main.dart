@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 void main() {
   runApp(const FinanceApp());
@@ -125,6 +126,21 @@ Future<void> loadExpenses() async {
           (total, expense) => total + expense.amount,
         );
   }
+  Map<String, double> get categoryTotals {
+  final Map<String, double> totals = {};
+
+  final now = DateTime.now();
+
+  for (final expense in expenses) {
+    if (expense.date.year == now.year &&
+        expense.date.month == now.month) {
+      totals[expense.category] =
+          (totals[expense.category] ?? 0) + expense.amount;
+    }
+  }
+
+  return totals;
+}
 
   Future<void> addExpense() async {
     final amountController = TextEditingController();
@@ -294,6 +310,73 @@ Future<void> loadExpenses() async {
               ),
             ),
             const SizedBox(height: 20),
+            if (categoryTotals.isNotEmpty) ...[
+  Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          const Text(
+            'Kategori Bazlı Harcamalar',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 200,
+            child: PieChart(
+              PieChartData(
+                sections: categoryTotals.entries.map((entry) {
+                  final index = categoryTotals.keys
+                      .toList()
+                      .indexOf(entry.key);
+
+                  final colors = [
+                    Colors.teal,
+                    Colors.orange,
+                    Colors.blue,
+                    Colors.purple,
+                    Colors.red,
+                  ];
+
+                  return PieChartSectionData(
+                    value: entry.value,
+                    color: colors[index % colors.length],
+                    title: '${(entry.value / monthlyTotal * 100).toStringAsFixed(1)}%',
+                    radius: 75,
+                    titleStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  );
+                }).toList(),
+                sectionsSpace: 2,
+                centerSpaceRadius: 35,
+              ),
+            ),
+          ),
+          const SizedBox(height: 15),
+          ...categoryTotals.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(entry.key),
+                  Text(formatMoney(entry.value)),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    ),
+  ),
+  const SizedBox(height: 20),
+],
             Expanded(
               child: expenses.isEmpty
                   ? const Text(
