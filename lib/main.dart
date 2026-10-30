@@ -69,6 +69,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  double monthlyBudget = 12000;
   final List<Expense> expenses = [];
   
 @override
@@ -126,6 +127,9 @@ Future<void> loadExpenses() async {
           (total, expense) => total + expense.amount,
         );
   }
+  double get remainingBudget {
+  return monthlyBudget - monthlyTotal;
+}
   Map<String, double> get categoryTotals {
   final Map<String, double> totals = {};
 
@@ -310,6 +314,29 @@ Future<void> loadExpenses() async {
               ),
             ),
             const SizedBox(height: 20),
+            Card(
+  child: Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Kalan Bütçem'),
+        const SizedBox(height: 10),
+        Text(
+          formatMoney(remainingBudget),
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: remainingBudget < 0
+                ? Colors.red
+                : Colors.green,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 20),
             if (categoryTotals.isNotEmpty) ...[
   Card(
     child: Padding(
