@@ -61,6 +61,40 @@ class Expense {
 }
 
 
+
+class Income {
+  final double amount;
+  final String category;
+  final String description;
+  final DateTime date;
+
+  Income({
+    required this.amount,
+    required this.category,
+    required this.description,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'amount': amount,
+      'category': category,
+      'description': description,
+      'date': date.toIso8601String(),
+    };
+  }
+
+  factory Income.fromJson(Map<String, dynamic> json) {
+    return Income(
+      amount: (json['amount'] as num).toDouble(),
+      category: json['category'] as String,
+      description: json['description'] as String,
+      date: DateTime.parse(json['date'] as String),
+    );
+  }
+}
+
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -71,11 +105,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   double monthlyBudget = 12000;
   final List<Expense> expenses = [];
+  final List<Income> incomes = [];
   
 @override
 void initState() {
   super.initState();
   loadExpenses();
+  loadIncomes();
   loadBudget();
 }
 Future<void> loadBudget() async {
@@ -181,8 +217,49 @@ Future<void> loadExpenses() async {
     );
   });
 }
+Future<void> saveIncomes() async {
+  final prefs = await SharedPreferences.getInstance();
 
+  final data = incomes.map((income) => income.toJson()).toList();
 
+  await prefs.setString('incomes', jsonEncode(data));
+}
+
+Future<void> loadIncomes() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final savedData = prefs.getString('incomes');
+
+  if (savedData == null) return;
+
+  final List<dynamic> decoded = jsonDecode(savedData);
+
+  if (!mounted) return;
+
+  setState(() {
+    incomes.clear();
+
+    incomes.addAll(
+      decoded.map(
+        (item) => Income.fromJson(
+          Map<String, dynamic>.from(item),
+        ),
+      ),
+    );
+  });
+}
+
+double get monthlyIncome {
+  final now = DateTime.now();
+
+  return incomes
+      .where(
+        (income) =>
+            income.date.year == now.year &&
+            income.date.month == now.month,
+      )
+      .fold(0.0, (total, income) => total + income.amount);
+}
   String formatMoney(double amount) {
     return '${amount.toStringAsFixed(2).replaceAll('.', ',')} TL';
   }
@@ -343,6 +420,121 @@ Future<void> loadExpenses() async {
     });
     await saveExpenses();
   }
+  Future<void> addIncome() async {
+  final amountController = TextEditingController();
+  final descriptionController = TextEditingController();
+
+  String selectedCategory = 'Burs';
+
+  final newIncome = await showDialog<Income>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Yeni Gelir'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: amountController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Tutar (TL)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Gelir Kategorisi',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      'Burs',
+                      'Maaş',
+                      'Harçlık',
+                      'Ek Gelir',
+                      'Diğer',
+                    ].map((category) {
+                      return DropdownMenuItem(
+                        value: category,
+                        child: Text(category),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedCategory = value;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Açıklama',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final amount = double.tryParse(
+                    amountController.text.trim().replaceAll(',', '.'),
+                  );
+
+                  if (amount == null ||
+                      !amount.isFinite ||
+                      amount <= 0) {
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Geçerli bir tutar giriniz.'),
+                      ),
+                    );
+                    return;
+                  }
+
+                  Navigator.pop(
+                    dialogContext,
+                    Income(
+                      amount: amount,
+                      category: selectedCategory,
+                      description: descriptionController.text.trim(),
+                      date: DateTime.now(),
+                    ),
+                  );
+                },
+                child: const Text('Kaydet'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  if (!mounted || newIncome == null) return;
+
+  setState(() {
+    incomes.add(newIncome);
+  });
+
+  await saveIncomes();
+}
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +544,8 @@ Future<void> loadExpenses() async {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
+  child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,6 +579,27 @@ Future<void> loadExpenses() async {
               ),
             ),
             const SizedBox(height: 20),
+            Card(
+  child: Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Bu Ayki Gelirlerim'),
+        const SizedBox(height: 10),
+        Text(
+          formatMoney(monthlyIncome),
+          style: const TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+            color: Colors.green,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 20),
             Card(
   child: Padding(
     padding: const EdgeInsets.all(20),
@@ -488,13 +702,18 @@ const SizedBox(height: 20),
   ),
   const SizedBox(height: 20),
 ],
-            Expanded(
-              child: expenses.isEmpty
-                  ? const Text(
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (expenses.isEmpty)
+            
+                   const Text(
                       'Henüz harcama eklenmedi.',
                       style: TextStyle(fontSize: 16),
-                    )
-                  : ListView.builder(
+                    ),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                       itemCount: expenses.length,
                       itemBuilder: (context, index) {
                         final expense =
@@ -540,16 +759,32 @@ trailing: Row(
                         );
                       },
                     ),
-            ),
-          ],
+            ], // children
+          ),
+          ], // children
         ),
       ),
-      floatingActionButton:
-          FloatingActionButton.extended(
-        onPressed: addExpense,
-        icon: const Icon(Icons.add),
-        label: const Text('Harcama Ekle'),
-      ),
+      ), // SingleChildScrollView
+      floatingActionButton: Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    FloatingActionButton.extended(
+      heroTag: 'incomeButton',
+      onPressed: addIncome,
+      backgroundColor: Colors.green,
+      foregroundColor: Colors.white,
+      icon: const Icon(Icons.add),
+      label: const Text('Gelir Ekle'),
+    ),
+    const SizedBox(width: 10),
+    FloatingActionButton.extended(
+      heroTag: 'expenseButton',
+      onPressed: addExpense,
+      icon: const Icon(Icons.remove),
+      label: const Text('Harcama Ekle'),
+    ),
+  ],
+),
     );
   }
 }
