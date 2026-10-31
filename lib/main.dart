@@ -76,6 +76,78 @@ class _HomePageState extends State<HomePage> {
 void initState() {
   super.initState();
   loadExpenses();
+  loadBudget();
+}
+Future<void> loadBudget() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final savedBudget = prefs.getDouble('monthlyBudget');
+
+  if (!mounted) return;
+
+  setState(() {
+    monthlyBudget = savedBudget ?? 12000;
+  });
+}
+Future<void> saveBudget(double newBudget) async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.setDouble('monthlyBudget', newBudget);
+
+  if (!mounted) return;
+
+  setState(() {
+    monthlyBudget = newBudget;
+  });
+}
+
+Future<void> editBudget() async {
+  final controller = TextEditingController(
+    text: monthlyBudget.toStringAsFixed(0),
+  );
+
+  final newBudget = await showDialog<double>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Aylık Bütçeyi Değiştir'),
+      content: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: true,
+        ),
+        decoration: const InputDecoration(
+          labelText: 'Yeni bütçe (TL)',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final value = double.tryParse(
+              controller.text.trim().replaceAll(',', '.'),
+            );
+
+            if (value != null && value > 0 && value.isFinite) {
+              Navigator.pop(context, value);
+            }
+          },
+          child: const Text('Kaydet'),
+        ),
+      ],
+    ),
+  );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+  controller.dispose();
+});
+
+  if (!mounted || newBudget == null) return;
+
+  await saveBudget(newBudget);
 }
 
 Future<void> saveExpenses() async {
@@ -320,7 +392,19 @@ Future<void> loadExpenses() async {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Kalan Bütçem'),
+        
+Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    const Text('Kalan Bütçem'),
+    IconButton(
+      onPressed: editBudget,
+      icon: const Icon(Icons.edit),
+      tooltip: 'Bütçeyi Değiştir',
+    ),
+  ],
+),
+
         const SizedBox(height: 10),
         Text(
           formatMoney(remainingBudget),
