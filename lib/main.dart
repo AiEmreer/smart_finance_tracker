@@ -279,6 +279,9 @@ double get monthlyIncome {
   double get remainingBudget {
   return monthlyBudget - monthlyTotal;
 }
+double get monthlyNetBalance {
+  return monthlyIncome - monthlyTotal;
+}
   Map<String, double> get categoryTotals {
   final Map<String, double> totals = {};
 
@@ -593,6 +596,29 @@ double get monthlyIncome {
             fontSize: 30,
             fontWeight: FontWeight.bold,
             color: Colors.green,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 20),
+Card(
+  child: Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Bu Ayki Net Bakiyem'),
+        const SizedBox(height: 10),
+        Text(
+          formatMoney(monthlyNetBalance),
+          style: TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+            color: monthlyNetBalance >= 0
+                ? Colors.green
+                : Colors.red,
           ),
         ),
       ],
