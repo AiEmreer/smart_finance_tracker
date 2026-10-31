@@ -600,6 +600,51 @@ double get monthlyIncome {
   ),
 ),
 const SizedBox(height: 20),
+const Text(
+  'Gelir Geçmişim',
+  style: TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.bold,
+  ),
+),
+const SizedBox(height: 10),
+if (incomes.isEmpty)
+  const Text('Henüz gelir eklenmedi.'),
+  if (incomes.isNotEmpty)
+  ListView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    itemCount: incomes.length,
+    itemBuilder: (context, index) {
+      final income = incomes[incomes.length - 1 - index];
+
+      return Card(
+        child: ListTile(
+          leading: const Icon(
+            Icons.attach_money,
+            color: Colors.green,
+          ),
+          title: Text(formatMoney(income.amount)),
+          subtitle: Text(
+            '${income.date.day}.${income.date.month}.${income.date.year}',
+          ),
+          trailing: IconButton(
+  icon: const Icon(
+    Icons.delete_outline,
+    color: Colors.red,
+  ),
+  onPressed: () async {
+    setState(() {
+      incomes.removeAt(incomes.length - 1 - index);
+    });
+
+    await saveIncomes();
+  },
+),
+        ),
+      );
+    },
+  ),
             Card(
   child: Padding(
     padding: const EdgeInsets.all(20),
