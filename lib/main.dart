@@ -634,12 +634,37 @@ if (incomes.isEmpty)
     color: Colors.red,
   ),
   onPressed: () async {
-    setState(() {
-      incomes.removeAt(incomes.length - 1 - index);
-    });
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Geliri Sil'),
+      content: const Text(
+        'Bu gelir kaydını silmek istediğine emin misin?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('İptal'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text(
+            'Sil',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
+    ),
+  );
 
-    await saveIncomes();
-  },
+  if (confirmed != true || !mounted) return;
+
+  setState(() {
+    incomes.removeAt(incomes.length - 1 - index);
+  });
+
+  await saveIncomes();
+},
 ),
         ),
       );
@@ -791,12 +816,37 @@ trailing: Row(
         color: Colors.red,
       ),
       onPressed: () async {
-        setState(() {
-          expenses.removeAt(expenses.length - 1 - index);
-        });
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Harcamayı Sil'),
+      content: const Text(
+        'Bu harcama kaydını silmek istediğine emin misin?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('İptal'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text(
+            'Sil',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
+    ),
+  );
 
-        await saveExpenses();
-      },
+  if (confirmed != true || !mounted) return;
+
+  setState(() {
+    expenses.removeAt(expenses.length - 1 - index);
+  });
+
+  await saveExpenses();
+},
     ),
   ],
 ),                  
