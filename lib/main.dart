@@ -17,11 +17,26 @@ class FinanceApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Smart Finance Tracker',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.teal,
-        ),
-        useMaterial3: true,
-      ),
+  useMaterial3: true,
+  scaffoldBackgroundColor: const Color(0xFFF5F7FB),
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: const Color(0xFF2563EB),
+  ),
+  appBarTheme: const AppBarTheme(
+    backgroundColor: Color(0xFF2563EB),
+    foregroundColor: Colors.white,
+    centerTitle: false,
+    elevation: 0,
+  ),
+  cardTheme: CardThemeData(
+    color: Colors.white,
+    elevation: 0,
+    margin: const EdgeInsets.symmetric(vertical: 6),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+    ),
+  ),
+),
       home: const HomePage(),
     );
   }
@@ -561,28 +576,31 @@ double get monthlyNetBalance {
               ),
             ),
             const SizedBox(height: 20),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    const Text('Bu Ayki Harcamalarım'),
-                    const SizedBox(height: 10),
-                    Text(
-                      formatMoney(monthlyTotal),
-                      style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Card(
+
+
+            
+Card(
+  child: Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Bu Ayki Harcamalarım'),
+        const SizedBox(height: 10),
+        Text(
+          formatMoney(monthlyTotal),
+          style: const TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 20),
+
+Card(
   child: Padding(
     padding: const EdgeInsets.all(20),
     child: Column(
@@ -603,6 +621,7 @@ double get monthlyNetBalance {
   ),
 ),
 const SizedBox(height: 20),
+
 Card(
   child: Padding(
     padding: const EdgeInsets.all(20),
@@ -625,6 +644,7 @@ Card(
     ),
   ),
 ),
+
 const SizedBox(height: 20),
 const Text(
   'Gelir Geçmişim',
