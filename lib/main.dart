@@ -1,8 +1,12 @@
 
+
+ 
+ 
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 void main() {
   runApp(const FinanceApp());
@@ -118,6 +122,123 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _finishingVoice = false;
+  String _recognizedText = '';
+  double? _voiceAmount;
+
+  double? extractAmount(String text) {
+    // Recognizes amounts written with digits, e.g. 180 or 45,50 TL.
+    final match = RegExp(
+      r'(\d+(?:[.,]\d+)?)\s*(?:tl|lira|₺)?',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!.replaceAll(',', '.'));
+  }
+
+  String categoryFromSpeech(String text) {
+    final lower = text.toLowerCase();
+    if (RegExp(r'market|alışveriş|mağaza|kıyafet|ayakkabı|bakkal')
+        .hasMatch(lower)) {
+      return 'Alışveriş';
+    }
+    if (RegExp(r'otobüs|metro|taksi|benzin|ulaşım|dolmuş|tramvay')
+        .hasMatch(lower)) {
+      return 'Ulaşım';
+    }
+    if (RegExp(r'kira|fatura|elektrik|su faturası|internet faturası|doğalgaz')
+        .hasMatch(lower)) {
+      return 'Faturalar';
+    }
+    if (RegExp(r'sinema|oyun|konser|eğlence').hasMatch(lower)) {
+      return 'Eğlence';
+    }
+    if (RegExp(r'yemek|kahve|restoran|kafe|burger|pizza|çay')
+        .hasMatch(lower)) {
+      return 'Yemek';
+    }
+    return 'Diğer';
+  }
+
+  Future<void> startListening() async {
+    if (_isListening || _finishingVoice) return;
+    _recognizedText = '';
+    _voiceAmount = null;
+    try {
+      final available = await _speech.initialize(
+        onStatus: (status) {
+          if (!mounted || !_isListening) return;
+          if (status == 'done' || status == 'notListening') {
+            // Some devices stop listening automatically after a pause.
+            Future<void>.delayed(const Duration(milliseconds: 350), () {
+              if (mounted && _isListening) {
+                stopListening();
+              }
+            });
+          }
+        },
+        onError: (error) {
+          if (!mounted) return;
+          setState(() => _isListening = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ses tanıma hatası: ${error.errorMsg}')),
+          );
+        },
+      );
+      if (!mounted) return;
+      if (!available) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konuşma tanıma kullanılamıyor.')),
+        );
+        return;
+      }
+      setState(() => _isListening = true);
+      await _speech.listen(
+        localeId: 'tr_TR',
+        onResult: (result) {
+          if (!mounted) return;
+          setState(() {
+            _recognizedText = result.recognizedWords;
+            _voiceAmount = extractAmount(_recognizedText);
+          });
+        },
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isListening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Mikrofon başlatılamadı: $error')),
+      );
+    }
+  }
+
+  Future<void> stopListening() async {
+    if (_finishingVoice) return;
+    _finishingVoice = true;
+    if (mounted) setState(() => _isListening = false);
+    try {
+      await _speech.stop();
+      if (!mounted) return;
+      if (_recognizedText.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konuşma algılanamadı. Tekrar deneyin.')),
+        );
+      } else {
+        await addExpense(fromVoice: true);
+      }
+    } finally {
+      _finishingVoice = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _speech.cancel();
+    super.dispose();
+  }
+
   double monthlyBudget = 12000;
   final List<Expense> expenses = [];
   final List<Income> incomes = [];
@@ -313,10 +434,17 @@ double get monthlyNetBalance {
   return totals;
 }
 
-  Future<void> addExpense() async {
-    final amountController = TextEditingController();
-    final descriptionController = TextEditingController();
-    String selectedCategory = 'Yemek';
+  Future<void> addExpense({bool fromVoice = false}) async {
+    final amountController = TextEditingController(
+      text: fromVoice && _voiceAmount != null
+          ? _voiceAmount!.toStringAsFixed(2)
+          : '',
+    );
+    final descriptionController = TextEditingController(
+      text: fromVoice ? _recognizedText : '',
+    );
+    String selectedCategory =
+        fromVoice ? categoryFromSpeech(_recognizedText) : 'Yemek';
 
     final newExpense = await showDialog<Expense>(
       context: context,
@@ -431,6 +559,10 @@ double get monthlyNetBalance {
     
     
 
+    if (fromVoice) {
+      _recognizedText = '';
+      _voiceAmount = null;
+    }
     if (!mounted || newExpense == null) return;
 
     setState(() {
@@ -554,6 +686,48 @@ double get monthlyNetBalance {
   await saveIncomes();
 }
 
+  // Small summary cards stay readable on narrow phone screens.
+  Widget _summaryCard({
+    required String label,
+    required double amount,
+    required Color color,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  formatMoney(amount),
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -579,72 +753,34 @@ double get monthlyNetBalance {
 
 
             
-Card(
-  child: Padding(
-    padding: const EdgeInsets.all(20),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Bu Ayki Harcamalarım'),
-        const SizedBox(height: 10),
-        Text(
-          formatMoney(monthlyTotal),
-          style: const TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
+Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Expanded(
+      child: _summaryCard(
+        label: 'Gider',
+        amount: monthlyTotal,
+        color: const Color(0xFF1F2937),
+      ),
     ),
-  ),
-),
-const SizedBox(height: 20),
-
-Card(
-  child: Padding(
-    padding: const EdgeInsets.all(20),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Bu Ayki Gelirlerim'),
-        const SizedBox(height: 10),
-        Text(
-          formatMoney(monthlyIncome),
-          style: const TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
-            color: Colors.green,
-          ),
-        ),
-      ],
+    const SizedBox(width: 6),
+    Expanded(
+      child: _summaryCard(
+        label: 'Gelir',
+        amount: monthlyIncome,
+        color: Colors.green,
+      ),
     ),
-  ),
-),
-const SizedBox(height: 20),
-
-Card(
-  child: Padding(
-    padding: const EdgeInsets.all(20),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Bu Ayki Net Bakiyem'),
-        const SizedBox(height: 10),
-        Text(
-          formatMoney(monthlyNetBalance),
-          style: TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.bold,
-            color: monthlyNetBalance >= 0
-                ? Colors.green
-                : Colors.red,
-          ),
-        ),
-      ],
+    const SizedBox(width: 6),
+    Expanded(
+      child: _summaryCard(
+        label: 'Net Bakiye',
+        amount: monthlyNetBalance,
+        color: monthlyNetBalance >= 0 ? Colors.green : Colors.red,
+      ),
     ),
-  ),
+  ],
 ),
-
 const SizedBox(height: 20),
 const Text(
   'Gelir Geçmişim',
@@ -909,6 +1045,16 @@ trailing: Row(
       floatingActionButton: Row(
   mainAxisSize: MainAxisSize.min,
   children: [
+    FloatingActionButton(
+  heroTag: 'voiceButton',
+  mini: true,
+  tooltip: 'Sesli Harcama',
+  onPressed: _isListening ? stopListening : startListening,
+  backgroundColor: _isListening ? Colors.red : Colors.teal,
+  foregroundColor: Colors.white,
+  child: Icon(_isListening ? Icons.mic_off : Icons.mic),
+),
+const SizedBox(width: 8),
     FloatingActionButton.extended(
       heroTag: 'incomeButton',
       onPressed: addIncome,
